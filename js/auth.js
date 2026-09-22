@@ -93,10 +93,23 @@ export function explain(error) {
 
 /* ---------------------------------------------------------------- actions */
 
+/** Vrai si l'échec vient du réseau (hors ligne, wifi qui ne passe pas…). */
+export function isNetworkError(error) {
+  if (!error) return false;
+  return error.name === 'AuthRetryableFetchError' ||
+    error.__isAuthError === undefined && error instanceof TypeError ||
+    /fetch|network|timeout|failed to/i.test(String(error.message || ''));
+}
+
 export async function getSession() {
-  const { data, error } = await client.auth.getSession();
-  if (error) console.warn(error);
-  return data ? data.session : null;
+  try {
+    const { data, error } = await client.auth.getSession();
+    if (error) console.warn(error);
+    return { session: data ? data.session : null, error: error || null };
+  } catch (error) {
+    console.warn(error);
+    return { session: null, error };
+  }
 }
 
 export function onAuthChange(fn) {

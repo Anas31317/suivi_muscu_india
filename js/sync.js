@@ -42,6 +42,11 @@ function setStatus(state, message) {
   for (const fn of statusListeners) fn(status);
 }
 
+/** Affiche l'état « hors ligne » quand la synchro n'a pas pu démarrer. */
+export function markOffline() {
+  setStatus('err', 'Hors ligne · reconnecte-toi pour synchroniser');
+}
+
 function timeLabel() {
   return new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
 }

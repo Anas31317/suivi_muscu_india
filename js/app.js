@@ -361,21 +361,24 @@ async function main() {
   }
 
   auth.onAuthChange(handleAuthEvent);
-  const session = await auth.getSession(); // attend aussi l'échange du code des liens email
+  // attend aussi l'échange du code des liens email
+  const { session, error: sessionError } = await auth.getSession();
 
   if (session) {
     booted = true;
     await startUser(session.user);
   } else {
     const last = lastUser();
-    if (!navigator.onLine && last && store.hasCacheFor(last.id)) {
-      // Hors ligne avec une session expirée : on garde l'accès au cache de
-      // cet appareil ; la reconnexion sera demandée au retour du réseau.
+    // Sans réseau (ou avec un wifi qui ne passe pas), on rouvre les données
+    // de cet appareil au lieu de redemander une connexion impossible.
+    const unreachable = !navigator.onLine || auth.isNetworkError(sessionError);
+    if (unreachable && last && store.hasCacheFor(last.id)) {
       currentUser = last;
       store.openForUser(last.id);
       updateChrome();
+      sync.markOffline();
       window.addEventListener('online', async () => {
-        const s = await auth.getSession();
+        const { session: s } = await auth.getSession();
         if (s && s.user.id === last.id) {
           sync.start(last.id, { hadCache: true, onFirstLogin: async () => false });
         } else {
