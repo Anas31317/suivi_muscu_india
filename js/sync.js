@@ -1,67 +1,35 @@
 /**
- * Synchronisation optionnelle via Supabase (offre gratuite).
+ * Synchronisation des données de l'utilisateur connecté avec Supabase.
  *
- * Principe : tout l'état tient dans une seule ligne (`id`, `data` jsonb,
- * `updated_at`). On tire au chargement et au retour sur l'onglet, on pousse
- * après chaque modification (debounce). Le plus récent `updatedAt` gagne —
- * suffisant pour un usage mono-utilisateur sur deux appareils.
+ * Une ligne par compte dans `user_state` ; les règles RLS de la base
+ * garantissent qu'un utilisateur ne peut lire ou écrire que la sienne.
+ * On tire à la connexion et au retour sur l'onglet, on pousse après chaque
+ * modification (debounce). La version la plus récente (`updatedAt`) gagne.
  *
- * Sans configuration, l'appli reste 100 % locale. Voir docs/SYNC.md.
+ * Garde-fou : tant que la première lecture en ligne n'a pas réussi, rien
+ * n'est envoyé. Un appareil sans cache ne peut donc jamais écraser les
+ * données en ligne avec un programme vide.
  */
 
-import { getState, replaceState, subscribe } from './store.js';
+import { client } from './auth.js';
+import * as store from './store.js';
 
-const CONFIG_KEY = 'suivi-muscu:sync:v1';
-const TABLE = 'muscu_state';
+const TABLE = 'user_state';
 const PUSH_DELAY = 1200;
 
-let config = null;
-let applyingRemote = false;
+let userId = null;
+let hadCache = false;
+let reconciled = false;
+let onFirstLogin = async () => false;
 let pushTimer = 0;
+let dirty = false;
+let applyingRemote = false;
 let unsubscribe = null;
 const statusListeners = new Set();
 
-/* ---------------------------------------------------------- config i/o */
+/* ------------------------------------------------------------ statut */
 
-export function getConfig() {
-  if (config) return config;
-  try {
-    config = JSON.parse(localStorage.getItem(CONFIG_KEY) || 'null');
-  } catch {
-    config = null;
-  }
-  if (!config) config = { enabled: false, url: '', key: '', id: '' };
-  return config;
-}
-
-export function setConfig(next) {
-  config = { ...getConfig(), ...next };
-  config.url = (config.url || '').trim().replace(/\/+$/, '');
-  config.key = (config.key || '').trim();
-  config.id = (config.id || '').trim();
-  localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
-  restart();
-  return config;
-}
-
-export function isConfigured() {
-  const c = getConfig();
-  return Boolean(c.enabled && c.url && c.key && c.id);
-}
-
-export function randomId() {
-  const bytes = new Uint8Array(12);
-  crypto.getRandomValues(bytes);
-  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
-}
-
-/* ---------------------------------------------------------- statut ui */
-
-let status = { state: 'off', message: 'Stockage local (aucune synchro)' };
-
-export function getStatus() {
-  return status;
-}
+let status = { state: 'off', message: '' };
 
 export function onStatus(fn) {
   statusListeners.add(fn);
@@ -74,111 +42,154 @@ function setStatus(state, message) {
   for (const fn of statusListeners) fn(status);
 }
 
-/* ------------------------------------------------------------- réseau */
-
-function headers() {
-  const c = getConfig();
-  return {
-    apikey: c.key,
-    Authorization: 'Bearer ' + c.key,
-    'Content-Type': 'application/json',
-    // lu par la policy RLS : on ne voit que la ligne dont on connaît l'id
-    'x-sync-id': c.id
-  };
-}
-
-async function request(path, init) {
-  const c = getConfig();
-  const res = await fetch(`${c.url}/rest/v1/${path}`, { ...init, headers: { ...headers(), ...(init && init.headers) } });
-  if (!res.ok) {
-    const body = await res.text().catch(() => '');
-    throw new Error(`HTTP ${res.status} ${res.statusText}${body ? ' — ' + body.slice(0, 200) : ''}`);
-  }
-  return res;
-}
-
-/** Tire l'état distant. Renvoie l'objet, ou null si la ligne n'existe pas. */
-export async function pull() {
-  const c = getConfig();
-  const res = await request(`${TABLE}?id=eq.${encodeURIComponent(c.id)}&select=data`, { method: 'GET' });
-  const rows = await res.json();
-  return rows.length ? rows[0].data : null;
-}
-
-/** Pousse l'état local (upsert sur la clé primaire). */
-export async function push(state) {
-  const c = getConfig();
-  await request(TABLE, {
-    method: 'POST',
-    headers: { Prefer: 'resolution=merge-duplicates,return=minimal' },
-    body: JSON.stringify({ id: c.id, data: state, updated_at: new Date().toISOString() })
-  });
-}
-
-/* ------------------------------------------------------------ pilotage */
-
-/** Tire, et remplace l'état local si le distant est plus récent. */
-export async function syncNow({ quiet = false } = {}) {
-  if (!isConfigured()) return;
-  if (!quiet) setStatus('busy', 'Synchronisation…');
-  try {
-    const remote = await pull();
-    const local = getState();
-    if (remote && remote.updatedAt && remote.updatedAt > local.updatedAt) {
-      applyingRemote = true;
-      replaceState(remote, { touch: false });
-      applyingRemote = false;
-      setStatus('ok', 'Données récupérées · ' + timeLabel());
-      return 'pulled';
-    }
-    await push(local);
-    setStatus('ok', 'Synchronisé · ' + timeLabel());
-    return 'pushed';
-  } catch (err) {
-    applyingRemote = false;
-    console.error(err);
-    setStatus('err', 'Synchro impossible : ' + err.message);
-    throw err;
-  }
-}
-
 function timeLabel() {
   return new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
 }
 
-function schedulePush() {
-  if (!isConfigured() || applyingRemote) return;
+function failed(err) {
+  console.error(err);
+  setStatus('err', navigator.onLine
+    ? 'Synchro impossible · nouvel essai au prochain changement'
+    : 'Hors ligne · modifications gardées sur l’appareil');
+}
+
+/* ------------------------------------------------------------ réseau */
+
+async function pull() {
+  const { data, error } = await client.from(TABLE).select('data').eq('user_id', userId).maybeSingle();
+  if (error) throw error;
+  return data ? data.data : null;
+}
+
+async function push(state) {
+  const { error } = await client.from(TABLE).upsert({ user_id: userId, data: state }, { onConflict: 'user_id' });
+  if (error) throw error;
+}
+
+function applyRemote(data) {
+  applyingRemote = true;
+  try {
+    store.replaceState(data, { touch: false });
+  } finally {
+    applyingRemote = false;
+  }
+}
+
+/* ---------------------------------------------------------- pilotage */
+
+/**
+ * Démarre la synchro pour un utilisateur dont le cache est déjà ouvert.
+ * `opts.onFirstLogin(legacy)` est appelé si le compte n'a aucune donnée en
+ * ligne ni en local et que l'appareil contient des données de l'ancienne
+ * version ; il renvoie true pour les importer.
+ */
+export async function start(uid, opts) {
+  stop();
+  userId = uid;
+  hadCache = opts.hadCache;
+  onFirstLogin = opts.onFirstLogin;
+  unsubscribe = store.subscribe(onLocalChange);
+  document.addEventListener('visibilitychange', onVisible);
+  window.addEventListener('online', refresh);
+  return reconcile();
+}
+
+export function stop() {
+  if (unsubscribe) { unsubscribe(); unsubscribe = null; }
+  document.removeEventListener('visibilitychange', onVisible);
+  window.removeEventListener('online', refresh);
   clearTimeout(pushTimer);
-  setStatus('busy', 'Enregistrement…');
-  pushTimer = setTimeout(async () => {
-    try {
-      await push(getState());
+  userId = null;
+  reconciled = false;
+  dirty = false;
+  setStatus('off', '');
+}
+
+/** Première mise en cohérence local / en ligne. Renvoie ce qui a été fait. */
+async function reconcile() {
+  setStatus('busy', 'Synchronisation…');
+  let remote;
+  try {
+    remote = await pull();
+  } catch (err) {
+    failed(err);
+    return 'offline';
+  }
+
+  if (remote) {
+    reconciled = true;
+    const local = store.getState();
+    // Appareil neuf : la version en ligne fait foi, toujours.
+    if (!hadCache || !remote.updatedAt || remote.updatedAt >= local.updatedAt) {
+      applyRemote(remote);
+      dirty = false;
       setStatus('ok', 'Synchronisé · ' + timeLabel());
-    } catch (err) {
-      console.error(err);
-      setStatus('err', 'Synchro impossible : ' + err.message);
+      return 'pulled';
     }
-  }, PUSH_DELAY);
+    dirty = true;
+    await flush();
+    return 'pushed';
+  }
+
+  // Compte sans aucune donnée en ligne : 1re connexion.
+  if (!hadCache) {
+    const legacy = store.readLegacy();
+    if (legacy && legacy.logs.length && (await onFirstLogin(legacy))) {
+      applyRemote(legacy);
+      store.clearLegacy();
+    }
+  }
+  reconciled = true;
+  dirty = true;
+  await flush();
+  return 'created';
+}
+
+function onLocalChange() {
+  if (!userId || applyingRemote) return;
+  dirty = true;
+  clearTimeout(pushTimer);
+  if (!reconciled) return; // envoyé après la première lecture réussie
+  setStatus('busy', 'Enregistrement…');
+  pushTimer = setTimeout(() => { flush(); }, PUSH_DELAY);
+}
+
+/** Envoie immédiatement les modifications en attente. Renvoie true si tout est en ligne. */
+export async function flush() {
+  clearTimeout(pushTimer);
+  if (!userId || !dirty) return true;
+  if (!reconciled) return false;
+  try {
+    await push(store.getState());
+    dirty = false;
+    setStatus('ok', 'Synchronisé · ' + timeLabel());
+    return true;
+  } catch (err) {
+    failed(err);
+    return false;
+  }
+}
+
+export function hasPendingChanges() {
+  return dirty;
+}
+
+/** Retour sur l'onglet ou retour du réseau. */
+async function refresh() {
+  if (!userId) return;
+  if (!reconciled) { await reconcile(); return; }
+  if (dirty) { await flush(); return; }
+  try {
+    const remote = await pull();
+    if (remote && remote.updatedAt && remote.updatedAt > store.getState().updatedAt) {
+      applyRemote(remote);
+    }
+    setStatus('ok', 'Synchronisé · ' + timeLabel());
+  } catch (err) {
+    failed(err);
+  }
 }
 
 function onVisible() {
-  if (document.visibilityState === 'visible') syncNow({ quiet: true }).catch(() => {});
-}
-
-function restart() {
-  if (unsubscribe) { unsubscribe(); unsubscribe = null; }
-  document.removeEventListener('visibilitychange', onVisible);
-  clearTimeout(pushTimer);
-
-  if (!isConfigured()) {
-    setStatus('off', 'Stockage local (aucune synchro)');
-    return;
-  }
-  unsubscribe = subscribe(schedulePush);
-  document.addEventListener('visibilitychange', onVisible);
-  syncNow({ quiet: false }).catch(() => {});
-}
-
-export function initSync() {
-  restart();
+  if (document.visibilityState === 'visible') refresh();
 }

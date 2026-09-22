@@ -1,21 +1,28 @@
 /**
  * Service worker : rend le site utilisable hors ligne (salle sans réseau).
- * Stratégie « réseau d'abord » sur les fichiers du site : en ligne on a
- * toujours la dernière version, hors ligne on sert la copie en cache.
- * Les requêtes vers d'autres domaines (Supabase) ne sont pas interceptées.
+ *
+ * - Fichiers du site : « réseau d'abord », copie en cache en secours.
+ * - Pages : toujours mises en cache sous ./index.html, jamais sous leur URL
+ *   réelle (qui peut contenir un code de connexion à usage unique).
+ * - Aucune requête vers Supabase n'est interceptée ni mise en cache : les
+ *   données personnelles ne passent jamais par ce cache.
  */
 
-const CACHE = 'suivi-muscu-v1';
+const CACHE = 'suivi-muscu-v2';
 const SHELL = [
   './',
   './index.html',
   './css/style.css',
   './js/app.js',
+  './js/auth.js',
+  './js/auth-views.js',
+  './js/config.js',
   './js/store.js',
   './js/seed.js',
   './js/charts.js',
   './js/sync.js',
   './js/ui.js',
+  './js/vendor/supabase-2.116.0.js',
   './manifest.webmanifest',
   './icons/icon.svg'
 ];
@@ -34,17 +41,33 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   const req = event.request;
-  if (req.method !== 'GET' || new URL(req.url).origin !== self.location.origin) return;
+  const url = new URL(req.url);
+  if (req.method !== 'GET' || url.origin !== self.location.origin) return;
+
+  if (req.mode === 'navigate') {
+    event.respondWith(
+      fetch(req)
+        .then((res) => {
+          if (res.ok) {
+            const copy = res.clone();
+            caches.open(CACHE).then((c) => c.put('./index.html', copy));
+          }
+          return res;
+        })
+        .catch(() => caches.match('./index.html'))
+    );
+    return;
+  }
 
   event.respondWith(
     fetch(req)
       .then((res) => {
-        if (res.ok) {
+        if (res.ok && !url.search) {
           const copy = res.clone();
           caches.open(CACHE).then((c) => c.put(req, copy));
         }
         return res;
       })
-      .catch(() => caches.match(req).then((hit) => hit || caches.match('./index.html')))
+      .catch(() => caches.match(req))
   );
 });

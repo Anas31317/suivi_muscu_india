@@ -2,8 +2,12 @@
  * État de l'application + persistance.
  *
  * Source de vérité : un seul objet JSON gardé en mémoire, miroité dans
- * localStorage à chaque mutation. La synchro distante (voir sync.js) pousse
- * et tire ce même objet, ce qui garde le modèle trivial à raisonner.
+ * localStorage à chaque mutation. La synchro (voir sync.js) pousse et tire
+ * ce même objet vers la ligne Supabase de l'utilisateur connecté.
+ *
+ * Le cache local est propre à chaque compte (clé suffixée par l'id
+ * utilisateur) et il est effacé à la déconnexion : rien ne reste sur un
+ * appareil partagé.
  *
  * Forme de l'état :
  * {
@@ -18,11 +22,14 @@
  * exercice ne réécrit donc jamais l'historique déjà enregistré.
  */
 
-import { buildSeedState } from './seed.js';
+import { buildTemplateState } from './seed.js';
 
-const STORAGE_KEY = 'suivi-muscu:state:v1';
+const STORAGE_PREFIX = 'suivi-muscu:state:v2:';
+// Données de la version sans compte, importables à la 1re connexion.
+const LEGACY_KEY = 'suivi-muscu:state:v1';
 
 let state = null;
+let storageKey = null;
 const listeners = new Set();
 
 /* ------------------------------------------------------------------ util */
@@ -93,22 +100,54 @@ function normalize(raw) {
   };
 }
 
-export function load() {
-  if (state) return state;
-  let raw = null;
+function readJSON(key) {
   try {
-    const txt = localStorage.getItem(STORAGE_KEY);
-    if (txt) raw = JSON.parse(txt);
+    const txt = localStorage.getItem(key);
+    return txt ? JSON.parse(txt) : null;
   } catch (err) {
-    console.warn('État local illisible, réinitialisation.', err);
+    console.warn('Données locales illisibles : ' + key, err);
+    return null;
   }
-  state = raw ? normalize(raw) : buildSeedState();
-  if (!raw) persist(false);
-  return state;
+}
+
+/**
+ * Ouvre le cache local d'un utilisateur. Renvoie true si un cache existait.
+ * Sans cache, l'état est le programme type (en mémoire) en attendant la synchro.
+ */
+export function openForUser(userId) {
+  storageKey = STORAGE_PREFIX + userId;
+  const raw = readJSON(storageKey);
+  state = raw ? normalize(raw) : buildTemplateState();
+  return Boolean(raw);
+}
+
+export function hasCacheFor(userId) {
+  return localStorage.getItem(STORAGE_PREFIX + userId) !== null;
+}
+
+/** Ferme la session locale ; `wipe` efface le cache de l'appareil. */
+export function closeUser({ wipe = true } = {}) {
+  if (wipe && storageKey) localStorage.removeItem(storageKey);
+  state = null;
+  storageKey = null;
+}
+
+export function isOpen() {
+  return state !== null;
+}
+
+export function readLegacy() {
+  const raw = readJSON(LEGACY_KEY);
+  return raw && Array.isArray(raw.sessions) ? normalize(raw) : null;
+}
+
+export function clearLegacy() {
+  localStorage.removeItem(LEGACY_KEY);
 }
 
 export function getState() {
-  return state || load();
+  if (!state) throw new Error('Aucun utilisateur connecté.');
+  return state;
 }
 
 /** Remplace tout l'état (import de fichier, tirage depuis la synchro). */
@@ -122,8 +161,9 @@ export function replaceState(next, { touch = true } = {}) {
 
 function persist(touch = true) {
   if (touch) state.updatedAt = new Date().toISOString();
+  if (!storageKey) return;
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    localStorage.setItem(storageKey, JSON.stringify(state));
   } catch (err) {
     console.error('Écriture localStorage impossible', err);
   }
@@ -149,8 +189,9 @@ function emit() {
   }
 }
 
-export function resetToSeed() {
-  state = buildSeedState();
+/** Repart du programme type, historique vide. */
+export function resetToTemplate() {
+  state = buildTemplateState();
   persist(false);
   emit();
 }

@@ -203,10 +203,18 @@ export function renderLineChart(host, points, opts = {}) {
     cross.setAttribute('opacity', 1);
     dots.forEach((d, k) => d.setAttribute('r', k === i ? 6 : 4));
 
-    tip.innerHTML =
-      `<div class="d">${formatDate(p.iso)}</div>` +
-      `<div class="v">${fmtNum(p.y, 1)}${unit ? ' ' + unit : ''}</div>` +
-      `<div class="s">${setsLabel(p.sets, mode)}</div>`;
+    // textContent uniquement : aucune donnée n'est interprétée comme du HTML
+    tip.textContent = '';
+    for (const [cls, text] of [
+      ['d', formatDate(p.iso)],
+      ['v', fmtNum(p.y, 1) + (unit ? ' ' + unit : '')],
+      ['s', setsLabel(p.sets, mode)]
+    ]) {
+      const line = document.createElement('div');
+      line.className = cls;
+      line.textContent = text;
+      tip.append(line);
+    }
     tip.classList.add('on');
 
     const scale = host.clientWidth / width || 1;

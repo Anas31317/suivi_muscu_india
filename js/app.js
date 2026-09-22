@@ -10,7 +10,10 @@
  *   #/seance/:id/nouveau   saisie d'une nouvelle séance
  *   #/log/:logId           modification d'une séance enregistrée
  *   #/progression?ex=:id   courbes de progression
- *   #/reglages             programme, données, synchro
+ *   #/reglages             programme, données, compte
+ *
+ * Sans session, seules les pages publiques sont accessibles :
+ *   #/connexion  #/inscription  #/mot-de-passe-oublie  #/nouveau-mot-de-passe
  */
 
 import * as store from './store.js';
@@ -18,9 +21,21 @@ import { fmtNum, formatDate } from './store.js';
 import { mountChart } from './charts.js';
 import { h, numInput, parseNum, toast, icon, ICONS } from './ui.js';
 import * as sync from './sync.js';
+import * as auth from './auth.js';
+import * as authViews from './auth-views.js';
 
 const app = document.getElementById('app');
 let cleanups = [];
+
+/** Utilisateur connecté : { id, email } ou null. */
+let currentUser = null;
+/** Vrai après un clic sur le lien « mot de passe oublié ». */
+let recoveryMode = false;
+/** Vrai une fois le démarrage terminé (avant, les événements d'auth sont ignorés). */
+let booted = false;
+
+const LAST_USER_KEY = 'suivi-muscu:last-user';
+const PUBLIC_ROUTES = new Set(['connexion', 'inscription', 'mot-de-passe-oublie', 'nouveau-mot-de-passe']);
 
 /* ------------------------------------------------------------- thème */
 
@@ -654,6 +669,8 @@ function viewSettings() {
       const file = e.target.files && e.target.files[0];
       if (!file) return;
       try {
+        if (file.size > 2 * 1024 * 1024) throw new Error('fichier trop gros (2 Mo maximum).');
+        if (!confirm('Remplacer toutes tes données actuelles par celles du fichier ?')) { e.target.value = ''; return; }
         store.importJSON(await file.text());
         toast('Données importées');
       } catch (err) {
@@ -667,7 +684,8 @@ function viewSettings() {
     h('h2', {}, 'Mes données'),
     h('p', { class: 'desc' },
       `${plural(state.logs.length, 'séance enregistrée', 'séances enregistrées')}. ` +
-      'Les données vivent dans ce navigateur : pense à exporter de temps en temps, ou active la synchro ci-dessous.'),
+      'Elles sont enregistrées dans ton compte et retrouvées sur tous tes appareils. ' +
+      'L’export te donne une copie de sauvegarde personnelle.'),
     h('div', { class: 'btn-row' },
       h('button', {
         class: 'btn', type: 'button',
@@ -683,67 +701,119 @@ function viewSettings() {
       h('button', {
         class: 'btn danger', type: 'button',
         onclick: () => {
-          if (!confirm('Tout effacer et repartir du programme initial ? Tout ton historique local sera perdu.')) return;
-          store.resetToSeed();
+          if (!confirm('Effacer tout ton historique et repartir du programme type ? C’est irréversible (exporte d’abord si besoin).')) return;
+          store.resetToTemplate();
           toast('Données réinitialisées');
         }
       }, 'Réinitialiser')
     )
   );
 
-  /* --- synchro ------------------------------------------------------- */
-  const cfg = sync.getConfig();
-  const urlIn = h('input', { id: 'sync-url', type: 'text', value: cfg.url, placeholder: 'https://xxxxx.supabase.co', autocomplete: 'off' });
-  const keyIn = h('input', { id: 'sync-key', type: 'password', value: cfg.key, placeholder: 'clé anon publique', autocomplete: 'off' });
-  const idIn = h('input', { id: 'sync-id', type: 'text', value: cfg.id, placeholder: 'identifiant de sauvegarde', autocomplete: 'off' });
-  const enabledIn = h('input', { type: 'checkbox', id: 'sync-enabled', checked: cfg.enabled });
-
-  const syncSection = h('div', { class: 'card section' },
-    h('h2', {}, 'Synchro entre appareils'),
-    h('p', { class: 'desc' },
-      'Optionnel et gratuit : avec un projet Supabase, tes séances se retrouvent sur le téléphone et sur l’ordinateur. ' +
-      'La marche à suivre est dans docs/SYNC.md du dépôt.'),
-    h('div', { class: 'stack' },
-      h('div', { class: 'field' }, h('label', { for: 'sync-url' }, 'URL du projet'), urlIn),
-      h('div', { class: 'field' }, h('label', { for: 'sync-key' }, 'Clé anon'), keyIn),
-      h('div', { class: 'field' },
-        h('label', { for: 'sync-id' }, 'Identifiant de sauvegarde'),
-        h('div', { class: 'inline' },
-          idIn,
-          h('button', { class: 'btn small', type: 'button', onclick: () => { idIn.value = sync.randomId(); } }, 'Générer')
-        ),
-        h('span', { class: 'hint' }, 'Le même identifiant sur tous tes appareils. Garde-le pour toi : il donne accès à tes données.')
-      ),
-      h('label', { class: 'check' }, enabledIn, 'Activer la synchro')
-    ),
-    h('div', { class: 'btn-row section-actions' },
-      h('button', {
-        class: 'btn primary', type: 'button',
-        onclick: async () => {
-          sync.setConfig({ url: urlIn.value, key: keyIn.value, id: idIn.value, enabled: enabledIn.checked });
-          if (!enabledIn.checked) { toast('Synchro désactivée'); return; }
-          try {
-            const result = await sync.syncNow();
-            toast(result === 'pulled' ? 'Données récupérées depuis le cloud' : 'Données envoyées vers le cloud');
-          } catch {
-            toast('Échec : vérifie l’URL, la clé et la table.');
-          }
-        }
-      }, 'Enregistrer et synchroniser'),
-      h('button', {
-        class: 'btn', type: 'button',
-        onclick: async () => {
-          if (!sync.isConfigured()) { toast('Configure d’abord la synchro.'); return; }
-          try { await sync.syncNow(); toast('Synchronisé'); } catch { toast('Échec de la synchro.'); }
-        }
-      }, 'Synchroniser maintenant')
-    )
-  );
+  /* --- compte -------------------------------------------------------- */
+  const account = authViews.accountSection({ email: currentUser.email, onSignOut: signOut });
 
   return h('div', {},
     h('div', { class: 'page-head' }, h('h1', {}, 'Réglages')),
-    h('div', { class: 'stack' }, programme, data, syncSection)
+    h('div', { class: 'stack' }, programme, data, account)
   );
+}
+
+/* ------------------------------------------------------------- session */
+
+function rememberUser(user) {
+  try {
+    localStorage.setItem(LAST_USER_KEY, JSON.stringify({ id: user.id, email: user.email }));
+  } catch { /* stockage indisponible : pas de mode hors ligne */ }
+}
+
+function lastUser() {
+  try {
+    const u = JSON.parse(localStorage.getItem(LAST_USER_KEY) || 'null');
+    return u && typeof u.id === 'string' && typeof u.email === 'string' ? u : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Ouvre les données d'un utilisateur connecté et lance la synchro. */
+async function startUser(user) {
+  if (currentUser && currentUser.id === user.id && store.isOpen()) return;
+  if (currentUser) endUser({ wipe: true });
+
+  currentUser = { id: user.id, email: user.email };
+  rememberUser(currentUser);
+  const hadCache = store.openForUser(user.id);
+  updateChrome();
+  render();
+
+  await sync.start(user.id, {
+    hadCache,
+    onFirstLogin: async (legacy) =>
+      confirm(
+        `Cet appareil contient des données de l’ancienne version du site ` +
+        `(${plural(legacy.logs.length, 'séance enregistrée', 'séances enregistrées')}).\n\n` +
+        `Les importer dans le compte ${user.email} ?\n\n` +
+        'N’accepte que si ce sont TES données.'
+      )
+  });
+}
+
+/** Ferme la session locale. `wipe` efface le cache de l'appareil. */
+function endUser({ wipe }) {
+  sync.stop();
+  store.closeUser({ wipe });
+  if (wipe) localStorage.removeItem(LAST_USER_KEY);
+  currentUser = null;
+  updateChrome();
+}
+
+async function signOut() {
+  const online = await sync.flush();
+  if (!online && sync.hasPendingChanges() && !confirm(
+    'Tes dernières modifications ne sont pas encore enregistrées en ligne (pas de réseau ?).\n\n' +
+    'Si tu te déconnectes maintenant, elles seront perdues. Continuer ?'
+  )) return;
+
+  endUser({ wipe: true });
+  await auth.signOut();
+  recoveryMode = false;
+  location.hash = '#/connexion';
+  toast('Déconnecté');
+}
+
+function handleAuthEvent(event, session) {
+  // Pas d'appel Supabase directement dans ce callback (recommandation supabase-js).
+  setTimeout(() => {
+    if (event === 'PASSWORD_RECOVERY') {
+      recoveryMode = true;
+      if (session) startUser(session.user);
+      location.hash = '#/nouveau-mot-de-passe';
+      render();
+      return;
+    }
+    if (!booted) return;
+    if (event === 'SIGNED_IN' && session) {
+      if (!currentUser || currentUser.id !== session.user.id) {
+        startUser(session.user).then(() => {
+          if (!recoveryMode) location.hash = '#/';
+        });
+      }
+    } else if (event === 'SIGNED_OUT') {
+      if (currentUser) {
+        endUser({ wipe: true });
+        location.hash = '#/connexion';
+        render();
+      }
+    } else if (event === 'USER_UPDATED' && session && currentUser) {
+      currentUser.email = session.user.email;
+    }
+  }, 0);
+}
+
+/** Affiche la navigation seulement quand on est connecté. */
+function updateChrome() {
+  document.getElementById('nav').hidden = !currentUser;
+  document.querySelector('.brand').setAttribute('href', currentUser ? '#/' : '#/connexion');
 }
 
 /* --------------------------------------------------------------- routeur */
@@ -751,10 +821,26 @@ function viewSettings() {
 function parseHash() {
   const raw = location.hash.replace(/^#\/?/, '');
   const [pathPart, queryPart] = raw.split('?');
-  const parts = pathPart.split('/').filter(Boolean).map(decodeURIComponent);
+  const parts = pathPart.split('/').filter(Boolean).map((p) => {
+    try { return decodeURIComponent(p); } catch { return ''; }
+  });
   const query = {};
   for (const [k, v] of new URLSearchParams(queryPart || '')) query[k] = v;
   return { parts, query };
+}
+
+function publicView(route) {
+  switch (route) {
+    case 'inscription': return authViews.viewSignUp();
+    case 'mot-de-passe-oublie': return authViews.viewForgot();
+    case 'nouveau-mot-de-passe':
+      return authViews.viewResetPassword({
+        hasSession: recoveryMode && Boolean(currentUser),
+        email: currentUser && currentUser.email,
+        onDone: () => { recoveryMode = false; location.hash = '#/'; }
+      });
+    default: return authViews.viewSignIn();
+  }
 }
 
 function render() {
@@ -762,20 +848,34 @@ function render() {
   cleanups = [];
 
   const { parts, query } = parseHash();
+  const route = parts[0] || '';
   let view;
   let active = 'seances';
 
   try {
-    if (parts[0] === 'seance' && parts[1] && parts[2] === 'nouveau') {
+    if (!auth.isConfigured) {
+      view = authViews.viewNotConfigured();
+    } else if (route === 'nouveau-mot-de-passe') {
+      view = publicView(route);
+    } else if (!currentUser || !store.isOpen()) {
+      // Garde d'accès : sans session, seules les pages publiques s'affichent.
+      if (!PUBLIC_ROUTES.has(route)) {
+        history.replaceState(null, '', '#/connexion');
+      }
+      view = publicView(PUBLIC_ROUTES.has(route) ? route : 'connexion');
+    } else if (PUBLIC_ROUTES.has(route)) {
+      history.replaceState(null, '', '#/');
+      view = viewSessions();
+    } else if (route === 'seance' && parts[1] && parts[2] === 'nouveau') {
       view = viewLogForm({ sessionId: parts[1] });
-    } else if (parts[0] === 'seance' && parts[1]) {
+    } else if (route === 'seance' && parts[1]) {
       view = viewSession(parts[1]);
-    } else if (parts[0] === 'log' && parts[1]) {
+    } else if (route === 'log' && parts[1]) {
       view = viewLogForm({ logId: parts[1] });
-    } else if (parts[0] === 'progression') {
+    } else if (route === 'progression') {
       view = viewProgression(query);
       active = 'progression';
-    } else if (parts[0] === 'reglages') {
+    } else if (route === 'reglages') {
       view = viewSettings();
       active = 'reglages';
     } else {
@@ -783,7 +883,7 @@ function render() {
     }
   } catch (err) {
     console.error(err);
-    view = h('div', { class: 'card empty' }, 'Erreur d’affichage : ' + err.message);
+    view = h('div', { class: 'card empty' }, 'Erreur d’affichage. Recharge la page.');
   }
 
   app.textContent = '';
@@ -802,33 +902,88 @@ function initStatusBar() {
   sync.onStatus((s) => {
     el.className = 'sync-status ' + (s.state === 'off' ? '' : s.state);
     el.textContent = s.message;
+    el.hidden = !s.message;
   });
 }
 
-function main() {
+/** Supprime les réglages de l'ancienne synchro sans compte (clé et identifiant). */
+function removeLegacySettings() {
+  try { localStorage.removeItem('suivi-muscu:sync:v1'); } catch { /* ignore */ }
+}
+
+/** Refuse l'affichage dans un cadre (protection contre le clickjacking). */
+function isFramed() {
+  try { return window.top !== window.self; } catch { return true; }
+}
+
+async function main() {
+  if (isFramed()) {
+    app.textContent = 'Ce site ne peut pas être affiché dans un cadre.';
+    return;
+  }
+
   initTheme();
-  store.load();
   initStatusBar();
+  removeLegacySettings();
+  updateChrome();
 
   window.addEventListener('hashchange', render);
 
   // Les vues se redessinent à chaque mutation du store, sauf pendant la
-  // saisie d'une séance (le brouillon n'écrit rien tant qu'on n'enregistre pas,
-  // mais l'ajout d'un exercice, lui, passe par le store : on évite le re-render
-  // qui viderait les champs en cours).
+  // saisie d'une séance (on évite de vider les champs en cours).
   store.subscribe(() => {
     const { parts } = parseHash();
     const editing = (parts[0] === 'seance' && parts[2] === 'nouveau') || parts[0] === 'log';
     if (!editing) render();
   });
 
+  if (!auth.isConfigured) {
+    render();
+    return;
+  }
+
+  app.append(h('div', { class: 'empty' }, 'Chargement…'));
+
+  // Retour d'un lien « mot de passe oublié » : ?flow=recovery (+ ?code= traité par supabase-js).
+  const url = new URL(location.href);
+  if (url.searchParams.get('flow') === 'recovery') {
+    recoveryMode = true;
+    url.searchParams.delete('flow');
+    history.replaceState(null, '', url.pathname + url.search + '#/nouveau-mot-de-passe');
+  }
+
+  auth.onAuthChange(handleAuthEvent);
+  const session = await auth.getSession(); // attend aussi l'échange du code des liens email
+
+  if (session) {
+    booted = true;
+    await startUser(session.user);
+  } else {
+    const last = lastUser();
+    if (!navigator.onLine && last && store.hasCacheFor(last.id)) {
+      // Hors ligne avec une session expirée : on garde l'accès au cache de
+      // cet appareil ; la reconnexion sera demandée au retour du réseau.
+      currentUser = last;
+      store.openForUser(last.id);
+      updateChrome();
+      window.addEventListener('online', async () => {
+        const s = await auth.getSession();
+        if (s && s.user.id === last.id) {
+          sync.start(last.id, { hadCache: true, onFirstLogin: async () => false });
+        } else {
+          endUser({ wipe: false }); // garde les modifs locales, poussées après reconnexion
+          render();
+        }
+      }, { once: true });
+    }
+    booted = true;
+  }
+
+  if (recoveryMode && !session) recoveryMode = false;
   render();
-  sync.initSync();
 
   if ('serviceWorker' in navigator) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker.register('sw.js').catch(() => {});
-    });
+    navigator.serviceWorker.register('sw.js').catch(() => {});
   }
 }
 

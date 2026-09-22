@@ -63,6 +63,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 
 html, body {
   margin: 0;
@@ -202,6 +203,7 @@ a  { color: inherit; }
 label { font-size: 0.82rem; color: var(--ink-2); }
 
 input[type="text"],
+input[type="email"],
 input[type="number"],
 input[type="date"],
 input[type="password"],
@@ -513,6 +515,56 @@ td.note { white-space: normal; color: var(--ink-muted); }
 .inline { display: flex; gap: 8px; }
 .check { display: flex; gap: 8px; align-items: center; cursor: pointer; }
 .check input { width: auto; margin: 0; accent-color: var(--accent); }
+
+/* ------------------------------------------------------ authentification */
+
+.nav[hidden] + .icon-btn { margin-left: auto; }
+
+.auth-wrap {
+  display: flex;
+  justify-content: center;
+  padding-top: 4vh;
+}
+.auth-card {
+  width: 100%;
+  max-width: 400px;
+  padding: 24px 22px;
+}
+.auth-card h1 { margin-bottom: 4px; }
+.auth-sub { color: var(--ink-muted); font-size: 0.875rem; margin-bottom: 18px; }
+.auth-card form { margin-top: 4px; }
+
+.btn.block { width: 100%; padding: 11px 14px; }
+
+.pw-wrap { position: relative; }
+.pw-wrap input { padding-right: 84px; }
+.pw-toggle {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.auth-msg {
+  padding: 10px 12px;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  border-radius: var(--radius-s);
+  border: 1px solid var(--border);
+}
+.auth-msg.error { color: var(--critical); background: color-mix(in srgb, var(--critical) 8%, transparent); border-color: color-mix(in srgb, var(--critical) 30%, transparent); }
+.auth-msg.info  { color: var(--ink-2); background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 25%, transparent); }
+
+.auth-links {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+  font-size: 0.85rem;
+}
+.auth-links a { color: var(--accent); text-decoration: none; }
+.auth-links a:hover { text-decoration: underline; }
 
 /* ------------------------------------------------------------- divers */
 

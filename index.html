@@ -3,8 +3,15 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!--
+  Politique de sécurité : seuls les scripts et styles du site s'exécutent,
+  et le navigateur ne peut contacter que le site lui-même et le projet Supabase.
+-->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https://xkdsoqgqwhqnszbbpgen.supabase.co; manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
 <title>Suivi Musculation</title>
 <meta name="description" content="Suivi de séances de musculation : saisie des séries, historique et progression.">
+<meta name="robots" content="noindex, nofollow">
 <meta name="theme-color" content="#f9f9f7">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
@@ -14,7 +21,7 @@
 <body>
 <header class="topbar">
   <a class="brand" href="#/">Suivi&nbsp;muscu</a>
-  <nav class="nav" id="nav">
+  <nav class="nav" id="nav" hidden>
     <a href="#/" data-route="seances">Séances</a>
     <a href="#/progression" data-route="progression">Progression</a>
     <a href="#/reglages" data-route="reglages">Réglages</a>
@@ -27,11 +34,13 @@
 <main id="app" class="app"></main>
 
 <footer class="footer">
-  <span id="sync-status" class="sync-status">Stockage local</span>
+  <span id="sync-status" class="sync-status" hidden></span>
 </footer>
 
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
+<!-- supabase-js 2.116.0, copie locale vérifiée (intégrité npm), licence MIT : js/vendor/supabase-LICENSE -->
+<script src="js/vendor/supabase-2.116.0.js"></script>
 <script type="module" src="js/app.js"></script>
 </body>
 </html>
