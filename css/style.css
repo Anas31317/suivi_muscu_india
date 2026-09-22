@@ -542,10 +542,6 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .inline { display: flex; gap: 8px; }
 .check { display: flex; gap: 8px; align-items: center; cursor: pointer; }
 
-.add-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
-.add-row > input { flex: 1 1 220px; }
-.add-row-opts { display: flex; gap: 8px; flex: 0 1 auto; }
-.add-row-opts select { width: auto; }
 
 .manage-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; }
 .manage-row input[type="text"] { flex: 1 1 auto; min-width: 0; }
@@ -611,7 +607,7 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; marg
 .sets { display: grid; gap: 6px; max-width: 620px; }
 .set-row {
   display: grid;
-  grid-template-columns: 22px minmax(64px, 0.9fr) minmax(0, 1fr) minmax(0, 1fr) 34px;
+  grid-template-columns: 22px minmax(64px, 0.9fr) minmax(0, 1fr) minmax(0, 1fr);
   align-items: center;
   gap: 8px;
 }
@@ -690,6 +686,51 @@ details.more[open] > summary { margin-bottom: 8px; }
   -webkit-backdrop-filter: blur(8px);
   border-top: 1px solid var(--border);
 }
+
+/* --------------------------------------------- modifier la séance */
+
+.edit-list { display: grid; }
+.edit-empty { padding: 6px 0 12px; }
+.edit-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--grid);
+}
+.edit-row .ex-num { margin-top: 8px; }
+.edit-fields { flex: 1 1 auto; min-width: 0; display: grid; gap: 6px; }
+.edit-opts { display: flex; gap: 6px; flex-wrap: wrap; }
+.edit-opts select { width: auto; flex: 1 1 auto; }
+.edit-row .mini { display: flex; gap: 2px; flex: none; margin-top: 4px; }
+.edit-add { display: grid; gap: 6px; margin-top: 14px; }
+.edit-add .edit-opts .btn { flex: none; }
+
+.prog-row-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  flex-wrap: wrap;
+}
+.prog-row-card .body { flex: 1 1 200px; min-width: 0; }
+.prog-row-card .name { font-weight: 600; }
+.prog-row-card .meta { font-size: 0.8rem; color: var(--ink-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.prog-row-card .mini { display: flex; gap: 2px; }
+
+/* --------------------------------------------------------------- cardio */
+
+.form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 16px; margin-bottom: 14px; }
+.duration { display: flex; align-items: center; gap: 6px; }
+.duration input { text-align: center; }
+.duration span { color: var(--ink-muted); font-size: 0.85rem; }
+.computed { font-size: 0.85rem; color: var(--accent-ink); font-weight: 500; margin: -4px 0 14px; min-height: 1em; }
+.chart-note { font-size: 0.8rem; color: var(--ink-muted); margin-top: 8px; text-align: center; }
+.chart-seg { margin: -4px 0 12px; }
+.tile-link { text-decoration: none; color: inherit; }
+.tile-link:hover { border-color: var(--axis); }
+.meta.cap::first-letter { text-transform: uppercase; }
+.row-value .v.small { font-size: 0.82rem; font-weight: 550; color: var(--ink-2); white-space: normal; text-align: right; }
 
 /* -------------------------------------------------------- programme */
 
@@ -911,7 +952,7 @@ details.accordion[open] > summary { margin-bottom: 8px; }
     bottom: 0;
     z-index: 40;
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
+    grid-template-columns: repeat(6, 1fr);
     gap: 0;
     margin: 0;
     height: calc(var(--tabbar-h) + env(safe-area-inset-bottom));
@@ -952,16 +993,20 @@ details.accordion[open] > summary { margin-bottom: 8px; }
   .page-actions > .btn:only-child { flex: 1 1 auto; }
   .date-field { min-width: 0; width: 100%; }
   .filter-select { width: 100%; min-width: 0; }
-  .set-row { grid-template-columns: 18px minmax(58px, 0.9fr) minmax(0, 1fr) minmax(0, 1fr) 30px; gap: 6px; }
+  .set-row { grid-template-columns: 18px minmax(58px, 0.9fr) minmax(0, 1fr) minmax(0, 1fr); gap: 6px; }
   .ex-card { padding: 12px 12px 14px; }
   .workout-actions { width: 100%; justify-content: space-between; }
   .workout-actions .date-field { width: auto; flex: 1 1 auto; max-width: 200px; }
-  .add-row-opts { flex: 1 1 100%; }
-  .add-row-opts .btn { margin-left: auto; }
   .manage-row { flex-wrap: wrap; }
   .manage-row input[type="text"] { flex: 1 1 100%; }
   .manage-row select { flex: 1 1 auto; }
   .footer { padding: 0 16px 16px; }
+}
+
+@media (max-width: 560px) {
+  .form-grid { grid-template-columns: 1fr; }
+  .nav a { font-size: 0.62rem; }
+  .nav a svg { width: 21px; height: 21px; }
 }
 
 @media (max-width: 440px) {

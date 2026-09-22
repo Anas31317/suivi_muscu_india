@@ -15,7 +15,9 @@
  *   updatedAt: ISO string,
  *   sessions: [{ id, name, exercises: [{ id, name, mode, defaultSets }] }],
  *   logs:     [{ id, sessionId, date, note, entries: [
- *                 { exerciseId, name, mode, note, sets: [{ weight, reps }] } ] }]
+ *                 { exerciseId, name, mode, note, sets: [{ weight, reps }] } ] }],
+ *   cardio:   [{ id, date, type, label, duration (min), distance (km),
+ *                calories, heartRate, note }]
  * }
  *
  * Chaque log fige le nom et le mode de l'exercice : renommer ou supprimer un
@@ -64,11 +66,16 @@ export function fmtNum(n, digits = 1) {
 
 /* ------------------------------------------------------- chargement / io */
 
+const numOrNull = (v) => (v === null || v === undefined || v === '' || Number.isNaN(Number(v)) ? null : Number(v));
+
 function normalize(raw) {
   const s = raw && typeof raw === 'object' ? raw : {};
   const sessions = Array.isArray(s.sessions) ? s.sessions : [];
   const logs = Array.isArray(s.logs) ? s.logs : [];
+  const cardio = Array.isArray(s.cardio) ? s.cardio : [];
   return {
+    // champs inconnus conservés : une version plus récente du site ne perd rien
+    ...s,
     version: 1,
     updatedAt: s.updatedAt || new Date().toISOString(),
     sessions: sessions.map((sess) => ({
@@ -96,6 +103,17 @@ function normalize(raw) {
           reps: st.reps === null || st.reps === undefined || st.reps === '' ? null : Number(st.reps)
         }))
       }))
+    })),
+    cardio: cardio.map((c) => ({
+      id: c.id || uid('cardio'),
+      date: c.date || todayISO(),
+      type: CARDIO_TYPES.some((t) => t.id === c.type) ? c.type : 'autre',
+      label: String(c.label || '').slice(0, 60),
+      duration: numOrNull(c.duration),   // minutes
+      distance: numOrNull(c.distance),   // km
+      calories: numOrNull(c.calories),
+      heartRate: numOrNull(c.heartRate), // bpm moyen
+      note: String(c.note || '').slice(0, 500)
     }))
   };
 }
@@ -347,10 +365,31 @@ export function renameSession(id, name) {
   });
 }
 
+/**
+ * Retire une séance du programme. Son historique est CONSERVÉ : les séances
+ * déjà enregistrées restent dans Historique et Progression.
+ */
 export function deleteSession(id) {
   mutate((s) => {
     s.sessions = s.sessions.filter((x) => x.id !== id);
-    s.logs = s.logs.filter((l) => l.sessionId !== id);
+  });
+}
+
+/**
+ * Enregistre en une fois le programme d'une séance (nom, exercices, ordre,
+ * nombre de séries). Ne touche jamais aux séances déjà enregistrées.
+ */
+export function saveSessionProgram(sessionId, { name, exercises }) {
+  mutate((s) => {
+    const sess = s.sessions.find((x) => x.id === sessionId);
+    if (!sess) return;
+    sess.name = name || sess.name;
+    sess.exercises = exercises.map((e) => ({
+      id: e.id || uid('e'),
+      name: e.name || 'Exercice',
+      mode: e.mode === 'bw' ? 'bw' : 'kg',
+      defaultSets: Math.min(10, Math.max(1, Number(e.defaultSets) || 3))
+    }));
   });
 }
 
@@ -421,6 +460,87 @@ export function deleteLog(logId) {
 
 export function getLog(logId) {
   return getState().logs.find((l) => l.id === logId) || null;
+}
+
+/* --------------------------------------------------------------- cardio */
+
+export const CARDIO_TYPES = [
+  { id: 'course', label: 'Course à pied', pace: true },
+  { id: 'tapis', label: 'Tapis de course', pace: true },
+  { id: 'marche', label: 'Marche', pace: true },
+  { id: 'velo', label: 'Vélo', pace: false },
+  { id: 'velo-appart', label: 'Vélo d’appartement', pace: false },
+  { id: 'rameur', label: 'Rameur', pace: true },
+  { id: 'elliptique', label: 'Elliptique', pace: false },
+  { id: 'natation', label: 'Natation', pace: true },
+  { id: 'corde', label: 'Corde à sauter', pace: false },
+  { id: 'autre', label: 'Autre', pace: false }
+];
+
+export function cardioType(id) {
+  return CARDIO_TYPES.find((t) => t.id === id) || CARDIO_TYPES[CARDIO_TYPES.length - 1];
+}
+
+/** Nom affiché : le type, ou le nom libre pour « Autre ». */
+export function cardioName(c) {
+  return c.type === 'autre' && c.label ? c.label : cardioType(c.type).label;
+}
+
+/** Séances cardio, la plus récente d'abord. */
+export function cardioList() {
+  return (getState().cardio || [])
+    .map((c, i) => [c, i])
+    .sort(([a, i], [b, j]) => (a.date < b.date ? 1 : a.date > b.date ? -1 : j - i))
+    .map(([c]) => c);
+}
+
+export function getCardio(id) {
+  return (getState().cardio || []).find((c) => c.id === id) || null;
+}
+
+export function saveCardio(entry) {
+  mutate((s) => {
+    if (!Array.isArray(s.cardio)) s.cardio = [];
+    const i = s.cardio.findIndex((c) => c.id === entry.id);
+    if (i >= 0) s.cardio[i] = entry;
+    else s.cardio.push(entry);
+  });
+}
+
+export function deleteCardio(id) {
+  mutate((s) => {
+    s.cardio = (s.cardio || []).filter((c) => c.id !== id);
+  });
+}
+
+/** Vitesse moyenne en km/h, ou null. */
+export function cardioSpeed(c) {
+  return c.distance && c.duration ? c.distance / (c.duration / 60) : null;
+}
+
+/** Allure en minutes par km, ou null. */
+export function cardioPace(c) {
+  return c.distance && c.duration ? c.duration / c.distance : null;
+}
+
+/** 5.53 -> "5:32" (min:s) */
+export function formatPace(minPerKm) {
+  if (!minPerKm || !Number.isFinite(minPerKm)) return '—';
+  let m = Math.floor(minPerKm);
+  let sec = Math.round((minPerKm - m) * 60);
+  if (sec === 60) { m += 1; sec = 0; }
+  return `${m}:${String(sec).padStart(2, '0')}`;
+}
+
+/** 75 -> "1 h 15", 42.5 -> "42 min 30" */
+export function formatDuration(min) {
+  if (min === null || min === undefined) return '—';
+  const total = Math.round(min * 60);
+  const hrs = Math.floor(total / 3600);
+  const mins = Math.floor((total % 3600) / 60);
+  const secs = total % 60;
+  if (hrs) return `${hrs} h ${String(mins).padStart(2, '0')}`;
+  return secs ? `${mins} min ${String(secs).padStart(2, '0')}` : `${mins} min`;
 }
 
 /* ------------------------------------------------------ export / import */

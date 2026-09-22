@@ -73,8 +73,18 @@ export function viewProgressionIndex() {
       orphans.map(row)));
   }
 
+  const cardioCount = (state.cardio || []).length;
+  groups.push(h('a', { class: 'card nav-card', href: '#/cardio' },
+    h('span', { class: 'row-icon' }, icon(ICONS.pulse, 18)),
+    h('div', { class: 'body' },
+      h('div', { class: 'name' }, 'Progression cardio'),
+      h('div', { class: 'meta' }, cardioCount ? `${plural(cardioCount, 'séance', 'séances')} · distance, durée, allure` : 'aucune séance cardio pour l’instant')
+    ),
+    h('span', { class: 'chev' }, icon(ICONS.chevron, 16))
+  ));
+
   return h('div', { class: 'page' },
-    pageHead('Progression', { sub: 'Dernière valeur et évolution depuis la séance précédente.' }),
+    pageHead('Progression', { sub: 'Touche un exercice pour voir sa courbe.' }),
     h('div', { class: 'stack' }, groups)
   );
 }
@@ -141,14 +151,14 @@ export function viewProgressionDetail(exerciseId, ctx) {
       h('span', { class: 'spacer' }),
       seg
     ),
-    points.length >= 2
+    points.length
       ? chartHost
-      : h('p', { class: 'list-empty' },
-          points.length === 1
-            ? 'Une seule séance enregistrée : la courbe apparaîtra dès la prochaine.'
-            : 'Pas encore de données pour cet exercice.')
+      : h('p', { class: 'list-empty' }, 'Pas encore de données pour cet exercice.'),
+    points.length === 1
+      ? h('p', { class: 'chart-note' }, 'Une seule séance pour l’instant : la courbe se tracera dès la prochaine.')
+      : null
   );
-  if (points.length >= 2) {
+  if (points.length) {
     ctx.onCleanup(mountChart(chartHost, points, { unit: metric.unit, label: metric.label, mode: exercise.mode }));
   }
 

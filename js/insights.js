@@ -127,6 +127,19 @@ export function recentRecords(limit = 5) {
   return records.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0)).slice(0, limit);
 }
 
+/** Cardio sur les `days` derniers jours (aujourd'hui compris) : nombre, minutes, km. */
+export function cardioStats(days) {
+  const from = new Date();
+  from.setDate(from.getDate() - (days - 1));
+  const since = toISO(from);
+  const items = (store.getState().cardio || []).filter((c) => c.date >= since);
+  return {
+    count: items.length,
+    minutes: items.reduce((a, c) => a + (c.duration || 0), 0),
+    km: items.reduce((a, c) => a + (c.distance || 0), 0)
+  };
+}
+
 /** Prénom déduit de l'email : « anas.hadouche@… » -> « Anas ». */
 export function firstName(email) {
   const local = String(email || '').split('@')[0].split(/[._-]/)[0];

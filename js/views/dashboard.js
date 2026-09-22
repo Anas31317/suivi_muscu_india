@@ -64,7 +64,13 @@ export function viewDashboard(ctx) {
   const tiles = h('div', { class: 'tiles tiles-4' },
     tile('Cette semaine', String(c.week), plural(c.week, 'séance', 'séances')),
     tile('Ce mois-ci', String(c.month), plural(c.month, 'séance', 'séances')),
-    tile('Au total', String(c.total), plural(c.total, 'séance', 'séances')),
+    (() => {
+      const cw = insights.cardioStats(7);
+      return h('a', { class: 'card tile tile-link', href: '#/cardio' },
+        h('div', { class: 'label' }, 'Cardio · 7 jours'),
+        h('div', { class: 'value' }, cw.count ? store.formatDuration(cw.minutes) : '—'),
+        h('div', { class: 'delta' }, cw.count ? `${plural(cw.count, 'séance', 'séances')} · ${fmtNum(cw.km, 1)} km` : 'aucune séance'));
+    })(),
     tile('Dernière séance', last ? insights.relativeDay(last.date) : '—', last ? formatDate(last.date) : 'aucune pour l’instant')
   );
 
@@ -73,7 +79,7 @@ export function viewDashboard(ctx) {
   const barsHost = h('div', {});
   const activity = h('section', { class: 'card chart-card' },
     h('div', { class: 'chart-head' },
-      h('h2', { class: 'title' }, 'Séances par semaine'),
+      h('h2', { class: 'title' }, 'Séances de muscu par semaine'),
       h('span', { class: 'chart-sub' }, '8 dernières semaines')
     ),
     barsHost

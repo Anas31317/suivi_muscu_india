@@ -7,7 +7,10 @@
  *   #/                        accueil (prochaine séance, chiffres, records)
  *   #/seances                 liste des séances
  *   #/seance/:id              séance du jour : saisie en direct, enregistrement auto
+ *   #/seance/:id/modifier     modifier le programme de la séance (bouton Enregistrer)
  *   #/log/:logId              modification d'une séance passée (même page)
+ *   #/cardio                  cardio : chiffres, progression, liste
+ *   #/cardio/nouveau, /:id    ajouter / modifier une séance cardio
  *   #/historique[?seance=id]  toutes les séances enregistrées
  *   #/progression             vue d'ensemble des exercices
  *   #/progression/:exId       progression d'un exercice
@@ -29,6 +32,8 @@ import { plural } from './views/common.js';
 import { viewDashboard } from './views/dashboard.js';
 import { viewSessions } from './views/sessions.js';
 import { viewWorkout } from './views/workout.js';
+import { viewSessionEditor } from './views/session-editor.js';
+import { viewCardio, viewCardioForm } from './views/cardio.js';
 import { viewHistory } from './views/history.js';
 import { viewProgressionIndex, viewProgressionDetail } from './views/progression.js';
 import { viewProgramme } from './views/programme.js';
@@ -50,6 +55,7 @@ const PUBLIC_ROUTES = new Set(['connexion', 'inscription', 'mot-de-passe-oublie'
 const TABS = [
   { id: 'accueil', href: '#/', label: 'Accueil', icon: ICONS.home },
   { id: 'seances', href: '#/seances', label: 'Séances', icon: ICONS.dumbbell },
+  { id: 'cardio', href: '#/cardio', label: 'Cardio', icon: ICONS.pulse },
   { id: 'historique', href: '#/historique', label: 'Historique', icon: ICONS.history },
   { id: 'progression', href: '#/progression', label: 'Progression', icon: ICONS.chart },
   { id: 'profil', href: '#/profil', label: 'Profil', icon: ICONS.user }
@@ -212,11 +218,16 @@ function privateView(parts, query, ctx) {
     case 'seances':
       return [viewSessions(), 'seances'];
     case 'seance':
+      if (a && b === 'modifier') return [viewSessionEditor(a, ctx), 'seances'];
       if (a && b) history.replaceState(null, '', `#/seance/${encodeURIComponent(a)}`); // anciens liens …/nouveau
       if (a) return [viewWorkout({ sessionId: a }, ctx), 'seances'];
       return [viewSessions(), 'seances'];
     case 'log':
       return [viewWorkout({ logId: a }, ctx), 'historique'];
+    case 'cardio':
+      if (a === 'nouveau') return [viewCardioForm(null), 'cardio'];
+      if (a) return [viewCardioForm(a), 'cardio'];
+      return [viewCardio(ctx), 'cardio'];
     case 'historique':
       return [viewHistory(query), 'historique'];
     case 'progression':
@@ -325,12 +336,12 @@ async function main() {
 
   window.addEventListener('hashchange', render);
 
-  // Les pages se redessinent à chaque modification des données, sauf la page
-  // de séance : elle s'enregistre à chaque saisie et gère son propre affichage
-  // (un rafraîchissement ferait perdre le champ en cours de frappe).
+  // Les pages se redessinent à chaque modification des données, sauf les
+  // formulaires (saisie de séance, modification de séance, cardio) : un
+  // rafraîchissement ferait perdre ce qui est en cours de frappe.
   store.subscribe(() => {
     const { parts } = parseHash();
-    const editing = (parts[0] === 'seance' && parts[1]) || parts[0] === 'log';
+    const editing = (parts[0] === 'seance' && parts[1]) || parts[0] === 'log' || (parts[0] === 'cardio' && parts[1]);
     if (!editing) render();
   });
 

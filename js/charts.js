@@ -172,7 +172,7 @@ function drawLine(host, width, points, opts) {
     for (const [cls, content] of [
       ['d', formatDate(p.iso)],
       ['v', fmtNum(p.y, 1) + (unit ? ' ' + unit : '')],
-      ['s', setsLabel(p.sets, mode)]
+      ['s', p.detail || setsLabel(p.sets || [], mode)]
     ]) {
       const line = document.createElement('div');
       line.className = cls;

@@ -7,8 +7,12 @@ privé (séries, charges, répétitions), un historique complet et des courbes d
   8 dernières semaines, derniers records.
 - **Séances** : chaque séance s'ouvre sur une page unique avec tous ses exercices, séries
   et reps. Pour chaque série, la valeur de la séance précédente est affichée (un tap la
-  recopie). Tout s'enregistre automatiquement pendant la saisie ; rouvrir la séance le
-  même jour reprend là où on en était.
+  recopie). Tout s'enregistre automatiquement pendant la saisie, et « Enregistrer la
+  séance » valide ; rouvrir la séance le même jour reprend là où on en était.
+  Le programme (exercices, nombre de séries, ordre) ne se change que via
+  « Modifier la séance », avec un bouton Enregistrer ; l'historique n'est jamais modifié.
+- **Cardio** : tapis, course, vélo, rameur… avec durée, distance, vitesse / allure,
+  chiffres sur 7 et 30 jours et courbe de progression par activité.
 - **Historique** : toutes les séances enregistrées, par mois, filtrables par séance.
 - **Progression** : vue d'ensemble de tous les exercices (dernière valeur, évolution,
   mini-courbe), puis pour chacun : charge max, volume, reps totales ou 1RM estimé.
@@ -63,7 +67,7 @@ de Supabase pour que les liens email fonctionnent en local).
 | `index.html` | squelette de la page, Content-Security-Policy |
 | `css/style.css` | tout le style (thème clair / sombre) |
 | `js/app.js` | routeur, onglets, garde d'accès, cycle de connexion |
-| `js/views/` | une page par fichier : accueil, séances, séance en cours (`workout.js`), historique, progression, programme, profil |
+| `js/views/` | une page par fichier : accueil, séances, séance en cours (`workout.js`), modifier la séance (`session-editor.js`), cardio, historique, progression, programme, profil |
 | `js/auth.js` | connexion, inscription, mots de passe (Supabase Auth) |
 | `js/auth-views.js` | écrans de connexion, inscription, mot de passe oublié, sécurité |
 | `js/sync.js` | synchronisation des données du compte |

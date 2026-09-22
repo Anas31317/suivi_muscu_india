@@ -63,6 +63,7 @@ export function buildTemplateState() {
       name: s.name,
       exercises: s.exercises.map(([id, name, mode, defaultSets]) => ({ id, name, mode, defaultSets }))
     })),
-    logs: []
+    logs: [],
+    cardio: []
   };
 }

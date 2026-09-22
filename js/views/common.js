@@ -78,27 +78,6 @@ export function emptyState(title, text, action) {
   );
 }
 
-/** Formulaire inline « nouvel exercice ». */
-export function newExerciseForm(onAdd) {
-  const name = h('input', { type: 'text', placeholder: 'Nom de l’exercice', autocomplete: 'off', maxlength: 80 });
-  const mode = h('select', { 'aria-label': 'Type' }, h('option', { value: 'kg' }, 'Charge (kg)'), h('option', { value: 'bw' }, 'Poids du corps'));
-  const sets = h('select', { 'aria-label': 'Séries' }, ...[1, 2, 3, 4, 5, 6].map((n) => h('option', { value: n, selected: n === 3 }, n + ' séries')));
-
-  const submit = () => {
-    const value = name.value.trim();
-    if (!value) { name.focus(); return; }
-    onAdd({ name: value, mode: mode.value, defaultSets: Number(sets.value) });
-    name.value = '';
-  };
-  name.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } });
-
-  return h('div', { class: 'add-row' },
-    name,
-    h('div', { class: 'add-row-opts' }, mode, sets,
-      h('button', { class: 'btn small primary', type: 'button', onclick: submit }, icon(ICONS.plus, 14), 'Ajouter'))
-  );
-}
-
 /**
  * Carte d'une séance enregistrée, dépliable : détail des exercices,
  * boutons Modifier / Supprimer.
