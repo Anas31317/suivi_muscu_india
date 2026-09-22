@@ -215,10 +215,19 @@ export function lastLogForSession(sessionId) {
   return logsForSession(sessionId)[0] || null;
 }
 
-/** Historique d'un exercice, du plus ancien au plus récent. */
-export function historyForExercise(exerciseId) {
+/** Séance enregistrée pour une séance du programme à une date donnée (la plus récente). */
+export function logForSessionOn(sessionId, date) {
+  return logsForSession(sessionId).find((l) => l.date === date) || null;
+}
+
+/**
+ * Historique d'un exercice, du plus ancien au plus récent.
+ * `excludeLogId` : ignore une séance (celle qu'on est en train de saisir).
+ */
+export function historyForExercise(exerciseId, excludeLogId = null) {
   const out = [];
   for (const log of getState().logs) {
+    if (log.id === excludeLogId) continue;
     const entry = log.entries.find((e) => e.exerciseId === exerciseId);
     if (!entry) continue;
     const sets = entry.sets.filter((s) => s.reps !== null || s.weight !== null);
@@ -228,9 +237,12 @@ export function historyForExercise(exerciseId) {
   return out.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
 }
 
-/** Dernière perf connue d'un exercice (pour préremplir la saisie). */
-export function lastEntryForExercise(exerciseId) {
-  const h = historyForExercise(exerciseId);
+/**
+ * Dernière perf connue d'un exercice (pour préremplir la saisie).
+ * `excludeLogId` : ignore la séance en cours, pour comparer à la précédente.
+ */
+export function lastEntryForExercise(exerciseId, excludeLogId = null) {
+  const h = historyForExercise(exerciseId, excludeLogId);
   return h.length ? h[h.length - 1] : null;
 }
 

@@ -6,6 +6,7 @@ import * as insights from '../insights.js';
 import { mountWeekBars } from '../charts.js';
 import { h, icon, ICONS } from '../ui.js';
 import { sessionTitle, plural, emptyState } from './common.js';
+import { startLabel } from './sessions.js';
 
 export function viewDashboard(ctx) {
   const state = store.getState();
@@ -15,8 +16,25 @@ export function viewDashboard(ctx) {
   const c = insights.counts();
 
   /* --- prochaine séance ---------------------------------------------- */
+  // Séance commencée aujourd'hui : on propose de la reprendre.
+  const todayLog = last && last.date === store.todayISO() ? last : null;
+  const current = todayLog ? store.getSession(todayLog.sessionId) : null;
+
   let hero;
-  if (next) {
+  if (current) {
+    hero = h('section', { class: 'card hero' },
+      h('p', { class: 'eyebrow' }, 'Séance du jour'),
+      h('h2', { class: 'hero-title' }, sessionTitle(current)),
+      h('p', { class: 'hero-meta' },
+        `${todayLog.entries.length} sur ${plural(current.exercises.length, 'exercice', 'exercices')} enregistrés`),
+      h('div', { class: 'btn-row' },
+        h('a', { class: 'btn primary', href: `#/seance/${current.id}` }, icon(ICONS.play, 14), 'Reprendre'),
+        next && next.id !== current.id
+          ? h('a', { class: 'btn', href: `#/seance/${next.id}` }, `Enchaîner : ${next.name}`)
+          : null
+      )
+    );
+  } else if (next) {
     const lastOfNext = store.lastLogForSession(next.id);
     hero = h('section', { class: 'card hero' },
       h('p', { class: 'eyebrow' }, last ? 'Prochaine séance' : 'Pour commencer'),
@@ -26,7 +44,7 @@ export function viewDashboard(ctx) {
         lastOfNext ? ` · dernière fois ${insights.relativeDay(lastOfNext.date)}` : ' · jamais faite'
       ),
       h('div', { class: 'btn-row' },
-        h('a', { class: 'btn primary', href: `#/seance/${next.id}/nouveau` }, icon(ICONS.play, 14), 'Commencer'),
+        h('a', { class: 'btn primary', href: `#/seance/${next.id}` }, icon(ICONS.play, 14), startLabel(next.id)),
         h('a', { class: 'btn', href: '#/seances' }, 'Choisir une autre séance')
       )
     );

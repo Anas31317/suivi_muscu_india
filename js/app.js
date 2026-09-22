@@ -6,9 +6,8 @@
  *
  *   #/                        accueil (prochaine séance, chiffres, records)
  *   #/seances                 liste des séances
- *   #/seance/:id              détail d'une séance
- *   #/seance/:id/nouveau      saisie d'une nouvelle séance
- *   #/log/:logId              modification d'une séance enregistrée
+ *   #/seance/:id              séance du jour : saisie en direct, enregistrement auto
+ *   #/log/:logId              modification d'une séance passée (même page)
  *   #/historique[?seance=id]  toutes les séances enregistrées
  *   #/progression             vue d'ensemble des exercices
  *   #/progression/:exId       progression d'un exercice
@@ -28,7 +27,8 @@ import { logo } from './logo.js';
 import { h, toast, icon, ICONS } from './ui.js';
 import { plural } from './views/common.js';
 import { viewDashboard } from './views/dashboard.js';
-import { viewSessions, viewSession, viewLogForm } from './views/sessions.js';
+import { viewSessions } from './views/sessions.js';
+import { viewWorkout } from './views/workout.js';
 import { viewHistory } from './views/history.js';
 import { viewProgressionIndex, viewProgressionDetail } from './views/progression.js';
 import { viewProgramme } from './views/programme.js';
@@ -212,11 +212,11 @@ function privateView(parts, query, ctx) {
     case 'seances':
       return [viewSessions(), 'seances'];
     case 'seance':
-      if (a && b === 'nouveau') return [viewLogForm({ sessionId: a }), 'seances'];
-      if (a) return [viewSession(a), 'seances'];
+      if (a && b) history.replaceState(null, '', `#/seance/${encodeURIComponent(a)}`); // anciens liens …/nouveau
+      if (a) return [viewWorkout({ sessionId: a }, ctx), 'seances'];
       return [viewSessions(), 'seances'];
     case 'log':
-      return [viewLogForm({ logId: a }), 'historique'];
+      return [viewWorkout({ logId: a }, ctx), 'historique'];
     case 'historique':
       return [viewHistory(query), 'historique'];
     case 'progression':
@@ -240,8 +240,11 @@ function privateView(parts, query, ctx) {
 let lastRoute = '';
 
 function render() {
-  cleanups.forEach((fn) => { try { fn(); } catch (err) { console.error(err); } });
+  // Les nettoyages peuvent enregistrer des données (page de séance), et donc
+  // relancer render() : on vide la liste avant de les exécuter.
+  const pending = cleanups;
   cleanups = [];
+  pending.forEach((fn) => { try { fn(); } catch (err) { console.error(err); } });
 
   const { parts, query } = parseHash();
   const route = parts[0] || '';
@@ -322,11 +325,12 @@ async function main() {
 
   window.addEventListener('hashchange', render);
 
-  // Les pages se redessinent à chaque modification des données, sauf pendant
-  // la saisie d'une séance (on évite de vider les champs en cours).
+  // Les pages se redessinent à chaque modification des données, sauf la page
+  // de séance : elle s'enregistre à chaque saisie et gère son propre affichage
+  // (un rafraîchissement ferait perdre le champ en cours de frappe).
   store.subscribe(() => {
     const { parts } = parseHash();
-    const editing = (parts[0] === 'seance' && parts[2] === 'nouveau') || parts[0] === 'log';
+    const editing = (parts[0] === 'seance' && parts[1]) || parts[0] === 'log';
     if (!editing) render();
   });
 
