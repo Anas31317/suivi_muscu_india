@@ -1,0 +1,35 @@
+# ---------------------------------------------------------------
+#  Le dépôt est PUBLIC : rien de personnel ni de secret ici.
+# ---------------------------------------------------------------
+
+# Exports de données faits depuis le site (Réglages > Exporter)
+suivi-muscu-*.json
+
+# SQL avec de vraies données (emails de la liste blanche, etc.)
+# ex. : supabase/liste-blanche.local.sql
+*.local.sql
+*.private.sql
+
+# Secrets et configurations locales
+.env
+.env.*
+*.pem
+*.key
+supabase/.temp/
+supabase/.branches/
+
+# Réglages locaux de Claude Code
+.claude/settings.local.json
+
+# Éditeurs
+.vscode/
+.idea/
+*.swp
+
+# Systèmes
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Outils (au cas où un build serait ajouté un jour)
+node_modules/

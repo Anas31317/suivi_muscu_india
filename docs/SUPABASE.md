@@ -20,6 +20,9 @@ Tout se règle une fois, dans le tableau de bord Supabase du projet.
 
 Le script peut être relancé sans risque.
 
+Pour garder la vraie liste sous la main, mets-la dans un fichier finissant par `.local.sql`
+(ex. `supabase/liste-blanche.local.sql`) : le `.gitignore` l'empêche d'être poussé.
+
 ### Ajouter ou retirer quelqu'un plus tard
 
 ```sql
