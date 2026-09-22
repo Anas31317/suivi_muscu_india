@@ -20,15 +20,11 @@
 </head>
 <body>
 <header class="topbar">
-  <a class="brand" href="#/">Suivi&nbsp;muscu</a>
-  <nav class="nav" id="nav" hidden>
-    <a href="#/" data-route="seances">Séances</a>
-    <a href="#/progression" data-route="progression">Progression</a>
-    <a href="#/reglages" data-route="reglages">Réglages</a>
-  </nav>
-  <button class="icon-btn" id="theme-toggle" type="button" aria-label="Changer de thème" title="Changer de thème">
-    <svg viewBox="0 0 24 24" aria-hidden="true" width="18" height="18"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
-  </button>
+  <div class="topbar-inner">
+    <a class="brand" id="brand" href="#/" aria-label="Suivi Muscu, accueil"></a>
+    <!-- onglets : en haut sur ordinateur, en bas sur téléphone -->
+    <nav class="nav" id="nav" aria-label="Navigation principale" hidden></nav>
+  </div>
 </header>
 
 <main id="app" class="app"></main>

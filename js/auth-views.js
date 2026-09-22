@@ -8,12 +8,14 @@
 
 import * as auth from './auth.js';
 import { PASSWORD_MIN_LENGTH } from './config.js';
-import { h, toast } from './ui.js';
+import { h, toast, icon, ICONS } from './ui.js';
+import { logo } from './logo.js';
 
 /* ------------------------------------------------------------ briques */
 
 function authCard(title, subtitle, ...body) {
   return h('div', { class: 'auth-wrap' },
+    h('div', { class: 'auth-brand' }, logo({ size: 48, large: true })),
     h('div', { class: 'card auth-card' },
       h('h1', {}, title),
       subtitle ? h('p', { class: 'auth-sub' }, subtitle) : null,
@@ -298,15 +300,15 @@ export function accountSection({ email, onSignOut }) {
     msg.show('Mot de passe modifié.', 'info');
   });
 
-  return h('div', { class: 'card section' },
-    h('h2', {}, 'Mon compte'),
-    h('p', { class: 'desc' }, 'Connecté en tant que ', h('strong', {}, email), '.'),
+  return h('section', { class: 'card section' },
+    h('h2', {}, 'Sécurité'),
+    h('p', { class: 'desc' }, 'La déconnexion efface tes données de cet appareil ; elles restent dans ton compte.'),
     h('details', { class: 'accordion' },
       h('summary', {}, 'Changer le mot de passe'),
       form
     ),
     h('div', { class: 'btn-row section-actions' },
-      h('button', { class: 'btn danger', type: 'button', onclick: onSignOut }, 'Se déconnecter')
+      h('button', { class: 'btn danger', type: 'button', onclick: onSignOut }, icon(ICONS.logout, 14), 'Se déconnecter')
     )
   );
 }
