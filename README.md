@@ -1,68 +1,73 @@
 # Suivi Musculation
 
-Petit site pour suivre mes séances de muscu : saisie des séries (charge et répétitions),
-historique complet, et courbes de progression par exercice.
+Site de suivi de musculation pour un petit groupe : chacun a son compte et son suivi
+privé (séries, charges, répétitions), un historique complet et des courbes de progression.
 
-- **Séances** : les 4 séances du programme. « Enregistrer une séance » ouvre la saisie :
-  charges reprises de la dernière fois, et répétitions précédentes affichées en grisé.
-- **Progression** : pour chaque exercice, charge max, volume, reps totales ou 1RM estimé
-  dans le temps, avec le tableau détaillé.
-- **Réglages** : modifier le programme (séances, exercices, ordre), exporter / importer
-  les données en JSON, configurer la synchro entre appareils.
+- **Compte** : inscription (réservée aux emails autorisés), connexion, mot de passe oublié
+  par email, changement de mot de passe.
+- **Séances** : « Enregistrer une séance » ouvre la saisie ; les charges de la dernière fois
+  sont reprises et les répétitions précédentes affichées en indication.
+- **Progression** : charge max, volume, reps totales ou 1RM estimé par exercice, avec le
+  tableau détaillé.
+- **Réglages** : modifier son programme, exporter / importer ses données, gérer son compte.
 
-Site statique en HTML, CSS et JavaScript, sans build ni dépendance. Il s'installe sur
-le téléphone comme une appli et fonctionne hors ligne.
+Site statique (HTML, CSS, JavaScript, sans build), hébergé sur GitHub Pages ; comptes et
+données sur Supabase. Il s'installe sur le téléphone comme une appli et reste utilisable
+hors ligne.
 
-## Mise en ligne (GitHub Pages)
+## Mise en service
 
-1. Pousser le dépôt sur GitHub.
-2. Sur GitHub : **Settings** > **Pages** > *Build and deployment* :
-   Source = **Deploy from a branch**, Branch = **main**, dossier **/ (root)** > **Save**.
-3. Au bout d'une minute, le site est en ligne sur
-   `https://anas31317.github.io/suivi_muscu_india/`.
+1. **Supabase** : suivre [docs/SUPABASE.md](docs/SUPABASE.md) (tables, liste blanche,
+   réglages d'authentification, envoi des emails, clé dans `js/config.js`).
+2. **GitHub Pages** : **Settings** > **Pages** > Source = *Deploy from a branch*,
+   Branch = `main`, dossier `/ (root)`.
+3. Le site est en ligne sur `https://anas31317.github.io/suivi_muscu_india/`.
 
 ### Installer sur le téléphone
 
-Ouvre le lien sur le téléphone, puis :
-- **Android (Chrome)** : menu ⋮ > *Ajouter à l'écran d'accueil* / *Installer l'application*
-- **iPhone (Safari)** : bouton Partager > *Sur l'écran d'accueil*
+- **Android (Chrome)** : menu ⋮ > *Installer l'application*
+- **iPhone (Safari)** : Partager > *Sur l'écran d'accueil*
 
-## Où sont mes données ?
+## Sécurité
 
-Par défaut, **dans le navigateur de l'appareil** (localStorage). Donc :
+- Inscription limitée aux emails de la liste blanche, vérifiée par la base de données.
+- Chaque utilisateur ne peut lire et modifier que ses propres données (Row Level Security).
+- Confirmation d'email obligatoire ; liens email en flux PKCE, à usage unique.
+- Content-Security-Policy stricte ; librairie Supabase hébergée dans le dépôt
+  (`js/vendor`, version 2.116.0 vérifiée) plutôt que chargée depuis un CDN.
+- À la déconnexion, les données locales de l'appareil sont effacées.
 
-- ce que tu saisis sur le téléphone reste sur le téléphone ;
-- vider les données du navigateur efface l'historique : exporte en JSON de temps en temps.
+Le détail est dans [docs/SUPABASE.md](docs/SUPABASE.md#ce-qui-protège-les-données).
 
-Pour avoir les **mêmes données sur le téléphone et l'ordinateur**, active la synchro
-gratuite avec Supabase : voir [docs/SYNC.md](docs/SYNC.md).
+La clé présente dans `js/config.js` est la clé **publique** (anon) : elle est faite pour
+être visible. Ne jamais y mettre la clé `service_role`.
 
 ## Tester en local
-
-Les modules JavaScript ne se chargent pas en ouvrant `index.html` directement depuis le disque.
-Lancer un petit serveur à la racine du dépôt :
 
 ```sh
 python -m http.server 8000
 ```
 
-puis ouvrir <http://localhost:8000>.
+puis ouvrir <http://localhost:8000> (ajouter `http://localhost:8000/**` aux Redirect URLs
+de Supabase pour que les liens email fonctionnent en local).
 
 ## Organisation du code
 
 | Fichier | Rôle |
 |---|---|
-| `index.html` | squelette de la page |
+| `index.html` | squelette de la page, Content-Security-Policy |
 | `css/style.css` | tout le style (thème clair / sombre) |
-| `js/app.js` | routeur et vues (séances, saisie, progression, réglages) |
-| `js/store.js` | état, persistance locale, métriques, import / export |
-| `js/seed.js` | programme et perfs de départ |
+| `js/app.js` | routeur, garde d'accès, vues (séances, saisie, progression, réglages) |
+| `js/auth.js` | connexion, inscription, mots de passe (Supabase Auth) |
+| `js/auth-views.js` | écrans de connexion, inscription, mot de passe oublié, compte |
+| `js/sync.js` | synchronisation des données du compte |
+| `js/store.js` | état, cache local par compte, métriques, import / export |
+| `js/seed.js` | programme type des nouveaux comptes |
 | `js/charts.js` | graphe de progression (SVG) |
-| `js/sync.js` | synchro Supabase optionnelle |
-| `js/ui.js` | petits utilitaires DOM |
+| `js/config.js` | URL et clé publique Supabase |
+| `js/vendor/` | supabase-js (copie locale) |
+| `supabase/` | scripts SQL (tables, règles de sécurité) |
 | `sw.js`, `manifest.webmanifest` | installation sur mobile et mode hors ligne |
 
-Le service worker sert toujours la version en ligne quand il y a du réseau, et la copie en
-cache sinon : une modification poussée sur GitHub arrive donc sur le téléphone au prochain
-chargement en ligne. Si tu ajoutes un fichier JS ou CSS, ajoute-le aussi à la liste `SHELL`
-de `sw.js` pour qu'il soit disponible hors ligne.
+Si tu ajoutes un fichier JS ou CSS, ajoute-le aussi à la liste `SHELL` de `sw.js` et
+incrémente `CACHE` pour qu'il soit disponible hors ligne.
